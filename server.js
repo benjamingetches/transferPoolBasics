@@ -23,26 +23,34 @@ pool.query('SELECT NOW()', (err, res) => {
 
 // Validation middleware
 const validateTransaction = (req, res, next) => {
-  const { type, amount, description, interest_rate } = req.body;
-
-  if (!type || !['asset', 'liability'].includes(type)) {
-    return res.status(400).json({ error: 'Type must be either "asset" or "liability"' });
-  }
-
-  if (!amount || isNaN(amount) || amount <= 0) {
-    return res.status(400).json({ error: 'Amount must be a positive number' });
-  }
-
-  if (!description || typeof description !== 'string') {
-    return res.status(400).json({ error: 'Description is required and must be a string' });
-  }
-
-  if (!interest_rate || isNaN(interest_rate) || interest_rate <= 0) {
-    return res.status(400).json({ error: 'Interest rate must be a non-negative number' });
-  }
-
-  next();
-};
+    const { type, amount, description, interest_rate, risk, maturity } = req.body;
+  
+    if (!type || !['asset', 'liability'].includes(type)) {
+      return res.status(400).json({ error: 'Type must be either "asset" or "liability"' });
+    }
+  
+    if (!amount || isNaN(amount) || amount <= 0) {
+      return res.status(400).json({ error: 'Amount must be a positive number' });
+    }
+  
+    if (!description || typeof description !== 'string') {
+      return res.status(400).json({ error: 'Description is required and must be a string' });
+    }
+  
+    if (!interest_rate || isNaN(interest_rate) || interest_rate <= 0) {
+      return res.status(400).json({ error: 'Interest rate must be a non-negative number' });
+    }
+  
+    if (risk && !['low', 'med', 'high'].includes(risk)) {
+      return res.status(400).json({ error: 'Risk must be either "low", "med", or "high"' });
+    }
+  
+    if (maturity && (isNaN(maturity) || maturity < 0)) {
+      return res.status(400).json({ error: 'Maturity must be a non-negative number' });
+    }
+  
+    next();
+  };
 
 // CRUD endpoints
 app.get('/transactions', async (req, res) => {
@@ -55,18 +63,19 @@ app.get('/transactions', async (req, res) => {
 });
 
 app.post('/transactions', validateTransaction, async (req, res) => {
-  const { type, amount, description, interest_rate } = req.body;
-  console.log('Received transaction data:', req.body);
-  try {
-    const result = await pool.query(
-      'INSERT INTO transactions (type, amount, description, interest_rate) VALUES ($1, $2, $3, $4) RETURNING *',
-      [type, amount, description, interest_rate]
-    );
-    res.status(201).json(result.rows[0]);
-  } catch (err) {
-    res.status(500).json({ error: 'Failed to create transaction' });
-  }
-});
+    const { type, amount, description, interest_rate, risk, maturity } = req.body;
+    console.log('Received transaction data:', req.body);
+    try {
+      const result = await pool.query(
+        'INSERT INTO transactions (type, amount, description, interest_rate, risk, maturity) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *',
+        [type, amount, description, interest_rate, risk || 'low', maturity || 0]
+      );
+      res.status(201).json(result.rows[0]);
+    } catch (err) {
+      console.error('Database error:', err);
+      res.status(500).json({ error: 'Failed to create transaction' });
+    }
+  });
 
 app.put('/transactions/:id', validateTransaction, async (req, res) => {
   const { id } = req.params;
@@ -126,6 +135,42 @@ app.get('/transfer-rate', async (req, res) => {
   }
 });
 
+
+app.get('/transactions/pool-by-maturity', async (req, res) => {
+    const { ranges } = req.query; // e.g., "0-1,1-3,3+"
+    const pools = ranges.split(',').map(range => {
+      const [min, max] = range.split('-');
+      return { min: parseFloat(min), max: parseFloat(max) };
+    });
+  
+    const result = await pool.query(
+      "SELECT * FROM transactions WHERE type = 'liability'"
+    );
+    const transactions = result.rows;
+  
+    const grouped = pools.map(pool => ({
+      range: `${pool.min}-${pool.max}`,
+      transactions: transactions.filter(t => t.maturity >= pool.min && t.maturity <= pool.max),
+    }));
+  
+    res.json(grouped);
+  });
+
+
+app.get('/transactions/pool-by-risk', async (req, res) => {
+    const result = await pool.query(
+     "SELECT * FROM transactions WHERE type = 'liability'"
+    );
+    const transactions = result.rows;
+  
+    const grouped = {
+      low: transactions.filter(t => t.risk === 'low'),
+      med: transactions.filter(t => t.risk === 'med'),
+      high: transactions.filter(t => t.risk === 'high'),
+    };
+  
+    res.json(grouped);
+  });
 // Root route
 app.get('/', (req, res) => {
   res.send('Welcome to the Transfer Pricing App!');
