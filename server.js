@@ -136,41 +136,88 @@ app.get('/transfer-rate', async (req, res) => {
 });
 
 
-app.get('/transactions/pool-by-maturity', async (req, res) => {
-    const { ranges } = req.query; // e.g., "0-1,1-3,3+"
-    const pools = ranges.split(',').map(range => {
-      const [min, max] = range.split('-');
-      return { min: parseFloat(min), max: parseFloat(max) };
-    });
-  
-    const result = await pool.query(
-      "SELECT * FROM transactions WHERE type = 'liability'"
-    );
-    const transactions = result.rows;
-  
-    const grouped = pools.map(pool => ({
-      range: `${pool.min}-${pool.max}`,
-      transactions: transactions.filter(t => t.maturity >= pool.min && t.maturity <= pool.max),
-    }));
-  
-    res.json(grouped);
-  });
-
-
 app.get('/transactions/pool-by-risk', async (req, res) => {
-    const result = await pool.query(
-     "SELECT * FROM transactions WHERE type = 'liability'"
-    );
-    const transactions = result.rows;
+    try {
+      const result = await pool.query(
+        "SELECT * FROM transactions WHERE type = 'liability'"
+      );
+      const transactions = result.rows;
   
-    const grouped = {
-      low: transactions.filter(t => t.risk === 'low'),
-      med: transactions.filter(t => t.risk === 'med'),
-      high: transactions.filter(t => t.risk === 'high'),
-    };
+      const grouped = {
+        low: transactions.filter(t => t.risk === 'low'),
+        med: transactions.filter(t => t.risk === 'med'),
+        high: transactions.filter(t => t.risk === 'high'),
+      };
   
-    res.json(grouped);
+      // Calculate transfer rate for each risk pool
+      const poolsWithTransferRate = Object.entries(grouped).map(([risk, transactions]) => {
+        const totalLiabilities = transactions.reduce((sum, t) => sum + parseFloat(t.amount), 0);
+        const weightedCost = transactions.reduce((sum, t) => sum + parseFloat(t.amount) * parseFloat(t.interest_rate) / 100, 0);
+        const transferRate = totalLiabilities > 0 ? weightedCost / totalLiabilities : 0;
+  
+        return {
+          risk,
+          transactions,
+          transferRate,
+        };
+      });
+  
+      res.json(poolsWithTransferRate);
+    } catch (err) {
+      res.status(500).json({ error: 'Failed to calculate transfer rate by risk' });
+    }
   });
+
+
+
+app.get('/transactions/pool-by-maturity', async (req, res) => {
+    try {
+      const { ranges } = req.query; // e.g., "0-1,1-3,3+"
+      const pools = ranges.split(',').map(range => {
+        if (range.endsWith('+')) {
+          const min = parseFloat(range.slice(0, -1)); // Remove the '+' and parse the number
+          return { min, max: Infinity }; // Use Infinity for "3+"
+        } else {
+          const [min, max] = range.split('-');
+          return { min: parseFloat(min), max: parseFloat(max) };
+        }
+      });
+  
+      const result = await pool.query(
+        "SELECT * FROM transactions WHERE type = 'liability'"
+      );
+      const transactions = result.rows;
+  
+      console.log('All transactions:', transactions); // Debugging: Log all transactions
+  
+      const grouped = pools.map(pool => {
+        const poolTransactions = transactions.filter(t => {
+          const maturity = parseFloat(t.maturity); // Convert maturity to a number
+          if (pool.max === Infinity) {
+            return maturity >= pool.min; // Handle "3+"
+          } else {
+            return maturity >= pool.min && maturity <= pool.max;
+          }
+        });
+  
+        console.log(`Transactions for range ${pool.min}-${pool.max}:`, poolTransactions); // Debugging: Log filtered transactions
+  
+        const totalLiabilities = poolTransactions.reduce((sum, t) => sum + parseFloat(t.amount), 0);
+        const weightedCost = poolTransactions.reduce((sum, t) => sum + parseFloat(t.amount) * parseFloat(t.interest_rate) / 100, 0);
+        const transferRate = totalLiabilities > 0 ? weightedCost / totalLiabilities : 0;
+  
+        return {
+          range: pool.max === Infinity ? `${pool.min}+` : `${pool.min}-${pool.max}`,
+          transactions: poolTransactions,
+          transferRate,
+        };
+      });
+  
+      res.json(grouped);
+    } catch (err) {
+      res.status(500).json({ error: 'Failed to calculate transfer rate by maturity' });
+    }
+});
 // Root route
 app.get('/', (req, res) => {
   res.send('Welcome to the Transfer Pricing App!');

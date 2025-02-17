@@ -164,8 +164,17 @@
   <!-- Multi Pool View -->
   <div id="multiPoolView" style="display: none;">
     <h2>Multi Pool</h2>
-    <p>Multi-pool functionality will be added here.</p>
-    <!-- Placeholder for multi-pool functionality -->
+    
+    <!-- Pooling Options -->
+    <div style="margin-bottom: 20px;">
+      <button onclick="poolByRisk()">Pool by Risk</button>
+      <button onclick="poolByMaturity()">Pool by Maturity</button>
+    </div>
+
+    <!-- Pooled Transactions -->
+    <div id="pooledTransactions">
+      <!-- Pooled transactions will be displayed here -->
+    </div>
   </div>
 
   <script>
@@ -253,6 +262,84 @@
       document.getElementById('multiPoolView').style.display = 'block';
       document.querySelector('.nav-button.active').classList.remove('active');
       document.querySelector('.nav-button:last-child').classList.add('active');
+    }
+
+    // Fetch and display transactions pooled by risk
+    async function poolByRisk() {
+        const response = await fetch('http://localhost:5001/transactions/pool-by-risk');
+        const data = await response.json();
+        const pooledTransactionsDiv = document.getElementById('pooledTransactions');
+        pooledTransactionsDiv.innerHTML = `
+            <h3>Pooled by Risk</h3>
+            ${data.map(pool => `
+            <div>
+                <h4>Risk: ${pool.risk}</h4>
+                <p><strong>Transfer Rate:</strong> ${(pool.transferRate * 100).toFixed(2)}%</p>
+                <table>
+                <thead>
+                    <tr>
+                    <th>Type</th>
+                    <th>Amount</th>
+                    <th>Interest Rate</th>
+                    <th>Description</th>
+                    <th>Maturity</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${pool.transactions.map(transaction => `
+                    <tr>
+                        <td>${transaction.type}</td>
+                        <td>${transaction.amount}</td>
+                        <td>${transaction.interest_rate}</td>
+                        <td>${transaction.description}</td>
+                        <td>${transaction.maturity}</td>
+                    </tr>
+                    `).join('')}
+                </tbody>
+                </table>
+            </div>
+            `).join('')}
+        `;
+    }
+
+    // Fetch and display transactions pooled by maturity
+    async function poolByMaturity() {
+        const response = await fetch('http://localhost:5001/transactions/pool-by-maturity?ranges=0-1,1-3,3-99');
+        const data = await response.json();
+        console.log('Pooled by Maturity Data:', data); // Debugging: Log the response data
+
+        const pooledTransactionsDiv = document.getElementById('pooledTransactions');
+        pooledTransactionsDiv.innerHTML = `
+            <h3>Pooled by Maturity</h3>
+            ${data.map(pool => `
+            <div>
+                <h4>Maturity Range: ${pool.range} years</h4>
+                <p><strong>Transfer Rate:</strong> ${(pool.transferRate * 100).toFixed(2)}%</p>
+                <table>
+                <thead>
+                    <tr>
+                    <th>Type</th>
+                    <th>Amount</th>
+                    <th>Interest Rate</th>
+                    <th>Description</th>
+                    <th>Risk</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${pool.transactions.map(transaction => `
+                    <tr>
+                        <td>${transaction.type}</td>
+                        <td>${transaction.amount}</td>
+                        <td>${transaction.interest_rate}</td>
+                        <td>${transaction.description}</td>
+                        <td>${transaction.risk}</td>
+                    </tr>
+                    `).join('')}
+                </tbody>
+                </table>
+            </div>
+            `).join('')}
+        `;
     }
 
     // Initial fetch
