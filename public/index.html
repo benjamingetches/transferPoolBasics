@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Transfer Pricing App</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 20px;
+      background-color: #f9f9f9;
+      color: #333;
+    }
+    h1, h2 {
+      color: #444;
+    }
+    form {
+      margin-bottom: 20px;
+      background: #fff;
+      padding: 20px;
+      border-radius: 8px;
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    }
+    label {
+      display: block;
+      margin-bottom: 5px;
+      font-weight: bold;
+    }
+    input, select, button {
+      width: 100%;
+      padding: 10px;
+      margin-bottom: 10px;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      font-size: 16px;
+    }
+    button {
+      background-color: #007bff;
+      color: white;
+      border: none;
+      cursor: pointer;
+      transition: background-color 0.3s ease;
+    }
+    button:hover {
+      background-color: #0056b3;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-bottom: 20px;
+      background: #fff;
+      border-radius: 8px;
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    }
+    th, td {
+      border: 1px solid #ddd;
+      padding: 12px;
+      text-align: left;
+    }
+    th {
+      background-color: #f4f4f4;
+      font-weight: bold;
+    }
+    tr:hover {
+      background-color: #f1f1f1;
+    }
+    .action-button {
+      background-color: #dc3545;
+      color: white;
+      border: none;
+      padding: 5px 10px;
+      border-radius: 4px;
+      cursor: pointer;
+      transition: background-color 0.3s ease;
+    }
+    .action-button:hover {
+      background-color: #c82333;
+    }
+    #transferRate {
+      font-size: 18px;
+      font-weight: bold;
+      color: #28a745;
+    }
+    .nav-button {
+      margin-right: 10px;
+      background-color: #6c757d;
+    }
+    .nav-button.active {
+      background-color: #007bff;
+    }
+  </style>
+</head>
+<body>
+  <h1>Transfer Pricing App</h1>
+
+  <!-- Navigation Bar -->
+  <div style="margin-bottom: 20px;">
+    <button class="nav-button active" onclick="showSinglePool()">Single Pool</button>
+    <button class="nav-button" onclick="showMultiPool()">Multi Pool</button>
+  </div>
+
+  <!-- Single Pool View -->
+  <div id="singlePoolView">
+    <form id="transactionForm">
+      <label for="type">Type:</label>
+      <select id="type" name="type" required>
+        <option value="asset">Asset</option>
+        <option value="liability">Liability</option>
+      </select>
+      <label for="amount">Amount:</label>
+      <input type="number" id="amount" name="amount" step="0.01" required>
+      <label for="interest_rate">Interest Rate:</label>
+      <input type="number" id="interest_rate" name="interest_rate" step="0.0001" required>
+      <label for="description">Description:</label>
+      <input type="text" id="description" name="description" required>
+      <button type="submit">Add Transaction</button>
+    </form>
+
+    <h2>Transactions</h2>
+    <table id="transactionsTable">
+      <thead>
+        <tr>
+          <th>ID</th>
+          <th>Type</th>
+          <th>Amount</th>
+          <th>Interest Rate</th>
+          <th>Description</th>
+          <th>Date</th>
+          <th>Action</th>
+        </tr>
+      </thead>
+      <tbody>
+        <!-- Transactions will be populated here -->
+      </tbody>
+    </table>
+
+    <h2>Transfer Rate</h2>
+    <p id="transferRate">Loading transfer rate...</p>
+    <button onclick="fetchTransferRate()">Refresh Transfer Rate</button>
+
+    <!-- Info Modal -->
+    <div id="infoModal" style="display: none; position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1); z-index: 1000;">
+      <h3>How Transfer Rate is Calculated</h3>
+      <p>
+        The transfer rate is calculated as the weighted average cost of all liabilities. 
+        Each liability's contribution to the transfer rate is determined by its amount and interest rate.
+        The formula is:
+      </p>
+      <pre>Transfer Rate = (Sum of (Amount * Interest Rate)) / Total Liabilities</pre>
+      <button onclick="closeInfoModal()">Close</button>
+    </div>
+
+    <button onclick="openInfoModal()" style="margin-top: 20px;">How is the Transfer Rate Calculated?</button>
+  </div>
+
+  <!-- Multi Pool View -->
+  <div id="multiPoolView" style="display: none;">
+    <h2>Multi Pool</h2>
+    <p>Multi-pool functionality will be added here.</p>
+    <!-- Placeholder for multi-pool functionality -->
+  </div>
+
+  <script>
+    // Fetch and display transactions
+    async function fetchTransactions() {
+      const response = await fetch('http://localhost:5001/transactions');
+      const transactions = await response.json();
+      const tbody = document.querySelector('#transactionsTable tbody');
+      tbody.innerHTML = transactions.map(transaction => `
+        <tr>
+          <td>${transaction.id}</td>
+          <td>${transaction.type}</td>
+          <td>${transaction.amount}</td>
+          <td>${transaction.interest_rate}</td>
+          <td>${transaction.description}</td>
+          <td>${new Date(transaction.date).toLocaleString()}</td>
+          <td><button class="action-button" onclick="deleteTransaction(${transaction.id})">Delete</button></td>
+        </tr>
+      `).join('');
+    }
+
+    // Add a new transaction
+    document.getElementById('transactionForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const formData = new FormData(e.target);
+      const transaction = {
+        type: formData.get('type'),
+        amount: parseFloat(formData.get('amount')),
+        description: formData.get('description'),
+        interest_rate: parseFloat(formData.get('interest_rate')) || 0
+      };
+
+      const response = await fetch('http://localhost:5001/transactions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(transaction)
+      });
+
+      if (response.ok) {
+        fetchTransactions(); // Refresh the list
+        e.target.reset(); // Clear the form
+      }
+    });
+
+    // Delete a transaction
+    async function deleteTransaction(id) {
+      const response = await fetch(`http://localhost:5001/transactions/${id}`, {
+        method: 'DELETE'
+      });
+
+      if (response.ok) {
+        fetchTransactions(); // Refresh the list
+      }
+    }
+
+    // Fetch and display transfer rate
+    async function fetchTransferRate() {
+      console.log('Fetching transfer rate...'); // Debugging
+      const response = await fetch('http://localhost:5001/transfer-rate');
+      const data = await response.json();
+      document.getElementById('transferRate').textContent = `Transfer Rate: ${(data.transferRate * 100).toFixed(2)}%`;
+    }
+
+    // Info Modal Functions
+    function openInfoModal() {
+      document.getElementById('infoModal').style.display = 'block';
+    }
+
+    function closeInfoModal() {
+      document.getElementById('infoModal').style.display = 'none';
+    }
+
+    // Navigation Functions
+    function showSinglePool() {
+      document.getElementById('singlePoolView').style.display = 'block';
+      document.getElementById('multiPoolView').style.display = 'none';
+      document.querySelector('.nav-button.active').classList.remove('active');
+      document.querySelector('.nav-button:first-child').classList.add('active');
+    }
+
+    function showMultiPool() {
+      document.getElementById('singlePoolView').style.display = 'none';
+      document.getElementById('multiPoolView').style.display = 'block';
+      document.querySelector('.nav-button.active').classList.remove('active');
+      document.querySelector('.nav-button:last-child').classList.add('active');
+    }
+
+    // Initial fetch
+    fetchTransactions();
+    fetchTransferRate();
+  </script>
+</body>
+</html>

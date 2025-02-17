@@ -1,0 +1,24 @@
+# Environment variables
+.env
+
+# Node.js dependencies
+node_modules/
+
+# Dependency lock file
+package-lock.json
+
+# Logs
+*.log
+
+# IDE/Editor specific files
+.vscode/
+.idea/
+
+# OS-specific files
+.DS_Store
+Thumbs.db
+
+# Build artifacts
+dist/
+build/
+
